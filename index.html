@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boston Crime Data Story</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            color: #222;
+            max-width: 1100px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        p {
+            max-width: 900px;
+        }
+
+        .chart {
+            width: 100%;
+            height: 500px;
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Nighttime Crime Patterns in Boston</h1>
+
+    <p>
+        For this data story, I focused on crime reports that happened during nighttime hours in Boston.
+        I defined nighttime as 6 PM through 2 AM so I could compare when incidents are most common and
+        where those incidents are concentrated across the city. Together, these two charts show that
+        nighttime crime is not spread evenly across time or place.
+    </p>
+
+    <h2>Crimes by Hour</h2>
+    <p>
+        The first chart gives an overview of how many nighttime incidents were reported at each hour.
+        Midnight stands out as the busiest hour in this filtered dataset, while the counts generally
+        decline after that point.
+    </p>
+    <div id="chart1" class="chart"></div>
+
+    <h2>Crime Hotspots Map</h2>
+    <p>
+        The second chart shifts from time to location. Each marker represents a nighttime incident from
+        the processed dataset created in Step 2. Looking at the full set of points makes it easier to see
+        where incidents cluster and which parts of the city stand out during nighttime hours.
+    </p>
+    <div id="chart2" class="chart"></div>
+
+    <script>
+        function parseCSV(text) {
+            const lines = text.trim().split(/\r?\n/);
+            const headers = lines[0].split(',');
+
+            return lines.slice(1).map(line => {
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    const nextChar = line[i + 1];
+
+                    if (char === '"') {
+                        if (inQuotes && nextChar === '"') {
+                            current += '"';
+                            i++;
+                        } else {
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current);
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+
+                values.push(current);
+
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index] !== undefined ? values[index] : '';
+                });
+                return row;
+            });
+        }
+
+        async function loadCharts() {
+            const hourResponse = await fetch('night_crimes_by_hour.csv');
+            const hourText = await hourResponse.text();
+            const hourData = parseCSV(hourText);
+
+            const hours = hourData.map(row => Number(row.HOUR));
+            const counts = hourData.map(row => Number(row.crime_count));
+
+            const trace1 = {
+                x: hours,
+                y: counts,
+                type: 'bar',
+                hovertemplate: 'Hour: %{x}<br>Incidents: %{y}<extra></extra>'
+            };
+
+            const layout1 = {
+                title: 'Nighttime Crimes by Hour',
+                xaxis: {
+                    title: 'Hour of Day'
+                },
+                yaxis: {
+                    title: 'Number of Incidents'
+                }
+            };
+
+            Plotly.newPlot('chart1', [trace1], layout1);
+
+            const mapResponse = await fetch('night_crime_locations.csv');
+            const mapText = await mapResponse.text();
+            const mapData = parseCSV(mapText);
+
+            const latitudes = mapData.map(row => Number(row.Lat));
+            const longitudes = mapData.map(row => Number(row.Long));
+            const labels = mapData.map(row => {
+                return `${row.OFFENSE_DESCRIPTION}<br>District: ${row.DISTRICT}<br>Day: ${row.DAY_OF_WEEK}<br>Hour: ${row.HOUR}`;
+            });
+
+            const trace2 = {
+                type: 'scattermapbox',
+                mode: 'markers',
+                lat: latitudes,
+                lon: longitudes,
+                text: labels,
+                marker: {
+                    size: 7,
+                    opacity: 0.65
+                },
+                hovertemplate: '%{text}<extra></extra>'
+            };
+
+            const layout2 = {
+                title: 'Nighttime Crime Locations',
+                mapbox: {
+                    style: 'carto-positron',
+                    center: {
+                        lat: 42.32,
+                        lon: -71.08
+                    },
+                    zoom: 10
+                },
+                margin: {
+                    t: 50,
+                    b: 0,
+                    l: 0,
+                    r: 0
+                }
+            };
+
+            Plotly.newPlot('chart2', [trace2], layout2);
+        }
+
+        loadCharts();
+    </script>
+
+</body>
+</html>
